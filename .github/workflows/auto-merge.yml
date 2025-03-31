@@ -28,8 +28,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fazer merge automático da PR
+      - name: Verificar a branch de origem
         if: env.approved == 'true'
+        id: check_branch
+        run: |
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          if [[ "$HEAD_REF" == "dev" ]]; then
+            echo "is_dev_branch=true" >> $GITHUB_ENV
+          else
+            echo "is_dev_branch=false" >> $GITHUB_ENV
+          fi
+
+      - name: Fazer merge automático da PR (dev para main)
+        if: env.approved == 'true' && env.is_dev_branch == 'true'
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fazer merge automático da PR (outras branches)
+        if: env.approved == 'true' && env.is_dev_branch == 'false'
         run: |
           gh pr merge ${{ github.event.pull_request.number }} --merge --auto --delete-branch
         env:
