@@ -18,7 +18,17 @@ jobs:
             echo "approved=false" >> $GITHUB_ENV
           fi
 
-      - name: Fazer merge automático
+      - name: Checkout do repositório
+        if: env.approved == 'true'
+        uses: actions/checkout@v4
+
+      - name: Configurar GitHub CLI
+        if: env.approved == 'true'
+        run: gh auth setup-git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fazer merge automático da PR
         if: env.approved == 'true'
         run: |
           gh pr merge ${{ github.event.pull_request.number }} --merge --auto --delete-branch
