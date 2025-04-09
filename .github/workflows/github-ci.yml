@@ -7,6 +7,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
+  checks: write
 
 jobs:
   process-pr:
@@ -101,12 +103,17 @@ jobs:
           # Fazer push da branch
           git push origin $BRANCH_NAME
           
-          # Criar e fazer merge da PR
-          gh pr create \
-            --title "chore: sync main into dev after release" \
-            --body "Sincronização automática da main para dev após release" \
-            --base dev \
-            --head $BRANCH_NAME
+          # Criar e fazer merge da PR usando a API do GitHub
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls \
+            -d '{
+              "title": "chore: sync main into dev after release",
+              "body": "Sincronização automática da main para dev após release",
+              "head": "'$BRANCH_NAME'",
+              "base": "dev"
+            }'
             
           # Aguardar a PR ser criada
           sleep 5
