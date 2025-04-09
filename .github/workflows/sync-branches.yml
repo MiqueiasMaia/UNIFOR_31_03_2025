@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
 
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
 
 jobs:
   sync-branches:
@@ -18,6 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configurar Git
         run: |
@@ -28,31 +35,39 @@ jobs:
         id: check_changes
         run: |
           git fetch origin dev
-          if git diff --quiet origin/dev main; then
-            echo "no_changes=true" >> $GITHUB_ENV
+          if ! git diff --quiet origin/dev main; then
+            echo "has_changes=true" >> $GITHUB_ENV
           else
-            echo "no_changes=false" >> $GITHUB_ENV
+            echo "has_changes=false" >> $GITHUB_ENV
           fi
 
       - name: Criar e fazer merge da PR para dev
-        if: env.no_changes == 'false'
+        if: env.has_changes == 'true'
         run: |
           # Criar uma nova branch para o merge
-          git checkout -b sync-main-to-dev
+          BRANCH_NAME="sync-main-to-dev-$(date +%s)"
+          git checkout -b $BRANCH_NAME
           
           # Fazer merge da main na branch temporária
           git merge origin/main --no-ff -m "chore: sync main into dev"
           
           # Fazer push da branch
-          git push origin sync-main-to-dev
+          git push origin $BRANCH_NAME
           
           # Criar e fazer merge da PR
           gh pr create \
             --title "chore: sync main into dev" \
             --body "Sincronização automática da main para dev" \
             --base dev \
-            --head sync-main-to-dev
+            --head $BRANCH_NAME
           
-          gh pr merge sync-main-to-dev --merge --auto
+          # Aguardar a PR ser criada
+          sleep 5
+          
+          # Fazer merge da PR
+          gh pr merge $BRANCH_NAME --merge --auto
+          
+          # Limpar a branch temporária
+          git push origin --delete $BRANCH_NAME
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
