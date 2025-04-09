@@ -73,13 +73,16 @@ jobs:
       - name: Sincronizar main com dev
         if: env.approved == 'true' && env.is_release_branch == 'true'
         run: |
-          # Fazer checkout da dev
-          git checkout dev
+          # Fazer fetch de todas as branches
+          git fetch origin main dev
+          
+          # Fazer checkout da dev remota
+          git checkout origin/dev
           
           # Fazer merge da main
-          git merge main --no-ff -m "chore: sync main into dev after release"
+          git merge origin/main --no-ff -m "chore: sync main into dev after release"
           
           # Fazer push direto para dev
-          git push origin dev
+          git push origin HEAD:dev
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
