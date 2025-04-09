@@ -91,13 +91,30 @@ jobs:
           # Fazer fetch de todas as branches
           git fetch origin main dev
           
-          # Fazer checkout da dev
-          git checkout dev
+          # Criar uma nova branch para o merge
+          BRANCH_NAME="sync-main-to-dev-$(date +%s)"
+          git checkout -b $BRANCH_NAME
           
           # Fazer merge da main
           git merge origin/main --no-ff -m "chore: sync main into dev after release"
           
-          # Fazer push forçado para dev
-          git push origin dev --force
+          # Fazer push da branch
+          git push origin $BRANCH_NAME
+          
+          # Criar e fazer merge da PR
+          gh pr create \
+            --title "chore: sync main into dev after release" \
+            --body "Sincronização automática da main para dev após release" \
+            --base dev \
+            --head $BRANCH_NAME
+            
+          # Aguardar a PR ser criada
+          sleep 5
+          
+          # Fazer merge da PR
+          gh pr merge $BRANCH_NAME --merge --auto
+          
+          # Limpar a branch temporária
+          git push origin --delete $BRANCH_NAME
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
