@@ -63,13 +63,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fazer merge da PR
-        if: env.approved == 'true' && env.is_release_branch == 'true'
-        run: |
-          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Sincronizar main com dev
         if: env.approved == 'true' && env.is_release_branch == 'true'
         run: |
