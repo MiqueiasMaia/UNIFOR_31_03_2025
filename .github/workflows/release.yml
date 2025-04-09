@@ -1,0 +1,70 @@
+name: Create Release
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verificar se a PR foi aprovada
+        id: check_approval
+        run: |
+          if [[ "${{ github.event.review.state }}" == "approved" ]]; then
+            echo "approved=true" >> $GITHUB_ENV
+          else
+            echo "approved=false" >> $GITHUB_ENV
+          fi
+
+      - name: Verificar se é uma branch de release
+        if: env.approved == 'true'
+        id: check_release_branch
+        run: |
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          if [[ "$HEAD_REF" =~ ^release/ ]]; then
+            echo "is_release_branch=true" >> $GITHUB_ENV
+            # Extrair a versão do nome da branch
+            VERSION=$(echo "$HEAD_REF" | sed 's/release\///')
+            echo "version=$VERSION" >> $GITHUB_ENV
+          else
+            echo "is_release_branch=false" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout do repositório
+        if: env.approved == 'true' && env.is_release_branch == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Git
+        if: env.approved == 'true' && env.is_release_branch == 'true'
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+
+      - name: Criar tag e release
+        if: env.approved == 'true' && env.is_release_branch == 'true'
+        run: |
+          # Criar a tag
+          git tag -a "v${{ env.version }}" -m "Release v${{ env.version }}"
+          git push origin "v${{ env.version }}"
+          
+          # Criar a release
+          gh release create "v${{ env.version }}" \
+            --title "Release v${{ env.version }}" \
+            --notes "Release v${{ env.version }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fazer merge da PR
+        if: env.approved == 'true' && env.is_release_branch == 'true'
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
