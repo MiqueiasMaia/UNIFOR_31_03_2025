@@ -1,0 +1,58 @@
+name: Sync Branches
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Git
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+
+      - name: Verificar se há mudanças para sincronizar
+        id: check_changes
+        run: |
+          git fetch origin dev
+          if git diff --quiet origin/dev main; then
+            echo "no_changes=true" >> $GITHUB_ENV
+          else
+            echo "no_changes=false" >> $GITHUB_ENV
+          fi
+
+      - name: Criar e fazer merge da PR para dev
+        if: env.no_changes == 'false'
+        run: |
+          # Criar uma nova branch para o merge
+          git checkout -b sync-main-to-dev
+          
+          # Fazer merge da main na branch temporária
+          git merge origin/main --no-ff -m "chore: sync main into dev"
+          
+          # Fazer push da branch
+          git push origin sync-main-to-dev
+          
+          # Criar e fazer merge da PR
+          gh pr create \
+            --title "chore: sync main into dev" \
+            --body "Sincronização automática da main para dev" \
+            --base dev \
+            --head sync-main-to-dev
+          
+          gh pr merge sync-main-to-dev --merge --auto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
