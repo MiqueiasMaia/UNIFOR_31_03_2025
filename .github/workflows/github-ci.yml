@@ -1,4 +1,4 @@
-name: Create Release
+name: GitHub CI
 
 on:
   pull_request_review:
@@ -9,7 +9,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  create-release:
+  process-pr:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,35 +22,51 @@ jobs:
             echo "approved=false" >> $GITHUB_ENV
           fi
 
-      - name: Verificar se é uma branch de release
+      - name: Verificar tipo da branch
         if: env.approved == 'true'
-        id: check_release_branch
+        id: check_branch_type
         run: |
           HEAD_REF="${{ github.event.pull_request.head.ref }}"
-          if [[ "$HEAD_REF" =~ ^release/ ]]; then
-            echo "is_release_branch=true" >> $GITHUB_ENV
+          if [[ "$HEAD_REF" == "dev" ]]; then
+            echo "branch_type=dev" >> $GITHUB_ENV
+          elif [[ "$HEAD_REF" =~ ^release/ ]]; then
+            echo "branch_type=release" >> $GITHUB_ENV
             # Extrair a versão do nome da branch
             VERSION=$(echo "$HEAD_REF" | sed 's/release\///')
             echo "version=$VERSION" >> $GITHUB_ENV
           else
-            echo "is_release_branch=false" >> $GITHUB_ENV
+            echo "branch_type=feature" >> $GITHUB_ENV
           fi
 
       - name: Checkout do repositório
-        if: env.approved == 'true' && env.is_release_branch == 'true'
+        if: env.approved == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configurar Git
-        if: env.approved == 'true' && env.is_release_branch == 'true'
+        if: env.approved == 'true'
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
 
-      - name: Criar tag e release
-        if: env.approved == 'true' && env.is_release_branch == 'true'
+      - name: Fazer merge automático (dev para main)
+        if: env.approved == 'true' && env.branch_type == 'dev'
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fazer merge automático (outras branches)
+        if: env.approved == 'true' && env.branch_type == 'feature'
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto --delete-branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Processar release
+        if: env.approved == 'true' && env.branch_type == 'release'
         run: |
           # Criar a tag
           git tag -a "v${{ env.version }}" -m "Release v${{ env.version }}"
@@ -60,22 +76,28 @@ jobs:
           gh release create "v${{ env.version }}" \
             --title "Release v${{ env.version }}" \
             --notes "Release v${{ env.version }}"
+          
+          # Fazer merge da PR
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sincronizar main com dev
-        if: env.approved == 'true' && env.is_release_branch == 'true'
+      - name: Sincronizar main com dev após release
+        if: env.approved == 'true' && env.branch_type == 'release'
         run: |
+          # Aguardar o merge da PR ser concluído
+          sleep 5
+          
           # Fazer fetch de todas as branches
           git fetch origin main dev
           
-          # Fazer checkout da dev remota
-          git checkout origin/dev
+          # Fazer checkout da dev
+          git checkout dev
           
           # Fazer merge da main
           git merge origin/main --no-ff -m "chore: sync main into dev after release"
           
-          # Fazer push direto para dev
-          git push origin HEAD:dev
+          # Fazer push forçado para dev
+          git push origin dev --force
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
